@@ -31,10 +31,19 @@
 | TRAP-11 | 混合偏移 | 落错版本 | UTC归整 | `app/values.py` | `tests/test_m3.py::test_timezone_equal` |
 | TRAP-23 | 换乘截止点 | 重复优惠 | 截止点排除 | `app/modules/m5_discounts/rules.py` | `tests/test_m5.py::test_exact_window_excluded` |
 | TRAP-25 | 票价重叠 | 随意取版 | 冲突隔离 | `app/modules/m3_fares/rules.py` | `tests/test_m3.py::test_overlap_rejected` |
+| TRAP-31 | 旧编码改写 | 覆盖原线路值 | route_legacy存原码，route归一 | `app/modules/m2_routes/rules.py` | `tests/test_migration.py::test_route_legacy_preserved` |
+| TRAP-32 | 对照半生效 | 逐条更新映射 | 校验后事务切换，失败留旧版 | `app/store.py` | `tests/test_alias.py::test_activation_atomic_on_mixed_mapping` |
+| TRAP-33 | 迁移重复入账 | 每次插新批 | 内容寻址迁移ID，重跑复用 | `app/migration.py` | `tests/test_migration.py::test_migration_idempotent` |
+| TRAP-34 | 旧批误删 | 覆盖或删除原批 | 只派生新批，原批不动 | `app/migration.py` | `tests/test_migration.py::test_old_batch_untouched` |
+| TRAP-35 | 未对平封存 | 不平衡也归档 | 迁移前置校验+M7拒绝 | `app/migration.py` | `tests/test_migration.py::test_unbalanced_old_batch_not_migrated` |
 
 ## 对账规则
 
 输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及参数产生唯一批次，事务写入；同源重跑只复用已有批次。
+
+## 迁移对账规则
+
+旧编码经版本化对照表进入当前口径：对照版本按内容寻址，任一时刻仅一个生效版本，激活事务化，失败保留旧版。封存批次不改写；迁移从首阶段记录还原规范输入，按生效对照重跑全流水线，生成迁移批。迁移批ID由（原批ID、对照版本、规则版本、规范输入）唯一确定，重复迁移复用同一结果。迁移批清分行并列旧批应扣与现行应扣，迁移差额=现行应扣−旧批应扣（旧批隔离行按0计并标注），逐行差额之和等于合计差额。旧批未对平不得迁移，迁移批未对平不得归档。
 
 ## 已知不覆盖
 

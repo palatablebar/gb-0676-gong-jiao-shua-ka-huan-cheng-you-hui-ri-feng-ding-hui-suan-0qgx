@@ -40,6 +40,19 @@ def create_app():
         p=request.get_json(silent=True) or {}
         if not isinstance(p.get("version"),int): raise DomainError("BAD_VERSION","请提供版本号")
         return store.review(run_id,p["version"],p.get("decision"))
+    @application.get("/api/aliases")
+    def aliases(): return {"active":store.active_aliases()[0],"versions":store.alias_versions()}
+    @application.post("/api/aliases")
+    def alias_create():
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict) or "mapping" not in p: raise DomainError("BAD_BODY","请求需要mapping对象")
+        return store.create_alias(p["mapping"])
+    @application.post("/api/aliases/<alias_id>/activate")
+    def alias_activate(alias_id): return store.activate_alias(alias_id)
+    @application.post("/api/runs/<run_id>/migrate")
+    def migrate(run_id):
+        from app.migration import migrate as derive
+        return derive(run_id)
     @application.get("/api/runs/<run_id>/archive")
     def archive(run_id):
         from app.archive import build_archive

@@ -15,8 +15,16 @@ STAGES=[stage1,stage2,stage3,stage4,stage5,stage6,stage7]
 def load_sample(name):
     if name not in {"dirty.csv","clean.csv","legacy.csv"}: raise DomainError("BAD_SAMPLE","样例不存在",404)
     return (ROOT/"sample_data"/name).read_bytes()
+def effective_parameters(params):
+    "未显式指定对照时，取当前生效对照版本；批次摘要因此覆盖口径。"
+    params=dict(params or {})
+    if "aliases" not in params:
+        version,mapping=store.active_aliases()
+        params["aliases"]=mapping
+        params["alias_version"]=version
+    return params
 def calculate(raw,params=None,stop=6):
-    params=params or {};started=time.monotonic();context={"parameters":params,"raw":raw,"quarantine":[]};stages=[];rows=[]
+    params=effective_parameters(params);started=time.monotonic();context={"parameters":params,"raw":raw,"quarantine":[]};stages=[];rows=[]
     for index,stage in enumerate(STAGES[:stop+1]):
         result=stage(raw if index==0 else rows,context)
         result=scalar(result);rows=result["rows"]
@@ -31,8 +39,10 @@ def execute(raw,params=None):
 def stage_preview(index,payload):
     if "rows" in payload and index>0:
         if not isinstance(payload["rows"],list) or any(not isinstance(row,dict) for row in payload["rows"]): raise DomainError("BAD_ROWS","记录需要对象列表")
-        if not isinstance(payload.get("context",{}),dict): raise DomainError("BAD_CONTEXT","上下文需要对象")
-        return scalar(STAGES[index](payload["rows"],payload.get("context",{"parameters":{},"quarantine":[]})))
+        context=payload.get("context",{})
+        if not isinstance(context,dict): raise DomainError("BAD_CONTEXT","上下文需要对象")
+        context={**context,"parameters":effective_parameters(context.get("parameters",{}))}
+        return scalar(STAGES[index](payload["rows"],context))
     raw=payload.get("csv")
     raw=raw.encode() if isinstance(raw,str) else load_sample(payload.get("sample","dirty.csv"))
     return calculate(raw,payload.get("parameters",{}),index)["stages"][-1]
